@@ -34,9 +34,12 @@ Everything lives on the clinic's own domain:
   The route is deliberately not in `wrangler.toml`: a `routes` entry there would make every deploy
   replace it. It shows under "Routes", not "Custom domains", because the portal itself still owns the
   address and this Worker sits in front of it.
-- Behind the scenes the Worker asks the portal's built-in Cloudflare address (`PORTAL_ORIGIN`,
-  sri-rudra-portal.pages.dev) whether a visitor is signed in. Staff never see that address; keep it
-  reachable.
+- The clinical pages check sign-in by asking admin.srirudraspeechandhearing.com/api/session (Cloudflare
+  sends a Worker's request to its own route straight to the portal). `PORTAL_ORIGIN` is only used in
+  local development.
+- The two Pages projects' built-in addresses (sri-rudra-portal.pages.dev and
+  sri-rudra-speech-hearing-clinic.pages.dev) are redirected to the clinic's domain by a Cloudflare Bulk
+  Redirect (account → Bulk redirects), keeping the path.
 - **Undo the new look**: delete the route. The portal goes straight back to the old look; the clinical
   tables stay.
 - **Undo a bad update**: Cloudflare → `sri-rudra-portal-plus` → Deployments → the previous version →

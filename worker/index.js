@@ -6,9 +6,8 @@
 // - /clinical/api/...  their API, stored in new clin_* tables of the portal database
 // - /__srr/...         theme files and fonts
 //
-// On admin.srirudraspeechandhearing.com (PRODUCTION_HOST) requests go to the portal unchanged.
-// On any other host (the workers.dev preview) they are forwarded to PORTAL_ORIGIN, so the new
-// look can be tried with real logins before staff see it.
+// On admin.srirudraspeechandhearing.com (PRODUCTION_HOST, the only live address) requests go to the
+// portal unchanged. On any other host (local development) they are forwarded to PORTAL_ORIGIN.
 import { handleClinicalApi } from './clinical.js';
 import { proxyToPortal } from './proxy.js';
 

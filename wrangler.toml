@@ -24,6 +24,7 @@ database_id = "81888080-d782-4f47-adab-a26b68afb6ba"
 migrations_dir = "migrations"
 
 [vars]
+# Only used in local development; on the live address everything goes to the portal directly.
 PORTAL_ORIGIN = "https://sri-rudra-portal.pages.dev"
 PRODUCTION_HOST = "admin.srirudraspeechandhearing.com"
 

@@ -44,10 +44,15 @@ function check(fn, input) {
 }
 
 // The portal decides who is signed in; we only ask it.
+// Asks the portal whether this visitor is signed in. On the live address the question goes to that
+// same address (Cloudflare sends a Worker's own-route request straight to the portal, not back through
+// the Worker); during local development it goes to PORTAL_ORIGIN (the stand-in portal).
 export async function portalSession(request, env) {
   const cookie = request.headers.get('cookie');
   if (!cookie) return null;
-  const res = await fetch(new URL('/api/session', env.PORTAL_ORIGIN), {
+  const here = new URL(request.url);
+  const origin = here.hostname === env.PRODUCTION_HOST ? here.origin : env.PORTAL_ORIGIN;
+  const res = await fetch(new URL('/api/session', origin), {
     headers: { cookie, accept: 'application/json', 'user-agent': request.headers.get('user-agent') || 'portal-plus' },
   });
   if (!res.ok) return null;
