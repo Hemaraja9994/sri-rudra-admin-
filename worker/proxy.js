@@ -1,6 +1,6 @@
 // Passing requests on to the admin portal, and adding the theme to its HTML pages.
 
-const THEME_VERSION = '2026-11-13b';
+const THEME_VERSION = '2026-11-13c';
 
 // Added to the <head> of every portal page: the app manifest and icons (so it can be installed),
 // a one-line catcher for the browser's install offer, then the theme and the two small scripts.

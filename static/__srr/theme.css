@@ -282,3 +282,36 @@
     .srr-sheet__scrim, .srr-sheet__card { transition: none; }
   }
 }
+
+/* ---- Audiology & SLP caseload insights on the portal dashboard (overlay.js) ---- */
+@media screen {
+  .srr-cdash { margin-top: 18px; }
+  .srr-cdash__head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .srr-cdash__head h3 { margin: 0; }
+  .srr-cdash__head > a { color: var(--srr-orange-ink); font-weight: 700; text-decoration: none; font-size: 15px; white-space: nowrap; }
+  .srr-cdash__head > a:hover { text-decoration: underline; }
+  .srr-cdash__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 880px) { .srr-cdash__grid { grid-template-columns: 1fr; } }
+  .srr-cdiv { border: 1px solid var(--srr-line); border-radius: 14px; padding: 14px; background: var(--srr-canvas); }
+  .srr-cdiv__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .srr-cdiv__head b { font-size: 16.5px; color: var(--srr-navy); }
+  .srr-cdiv__head a { color: var(--srr-orange-ink); font-weight: 700; text-decoration: none; font-size: 14px; }
+  .srr-ckpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  @media (max-width: 560px) { .srr-ckpis { grid-template-columns: 1fr 1fr; } }
+  .srr-kpi { background: #fff; border: 1px solid var(--srr-line); border-radius: 10px; padding: 8px 10px; }
+  .srr-kpi span { display: block; font-size: 10.5px; color: var(--srr-muted); font-weight: 700; letter-spacing: .02em; line-height: 1.25; }
+  .srr-kpi b { font-size: 22px; color: var(--srr-navy); font-variant-numeric: tabular-nums; }
+  .srr-kpi--dark { background: var(--srr-navy); border-color: var(--srr-navy); }
+  .srr-kpi--dark span { color: #b9c6d4; }
+  .srr-kpi--dark b { color: #fff; }
+  .srr-kpi--alert { border-color: rgba(183, 70, 18, .4); background: #fff6f1; }
+  .srr-kpi--alert b { color: var(--srr-risk); }
+  .srr-cbar { display: flex; gap: 3px; height: 12px; border-radius: 999px; overflow: hidden; margin-bottom: 8px; }
+  .srr-cbar span { flex-basis: 0; min-width: 6px; }
+  .srr-cleg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--srr-ink-2); }
+  .srr-cleg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; }
+  .srr-cleg b { color: var(--srr-navy); }
+  .srr-cleg--dx { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--srr-line); }
+  .srr-leg__lbl { color: var(--srr-muted); font-weight: 700; }
+  .srr-cempty { color: var(--srr-muted); font-size: 14px; margin: 4px 0 8px; }
+}

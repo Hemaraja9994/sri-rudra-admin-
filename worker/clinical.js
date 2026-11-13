@@ -4,13 +4,17 @@
 // (appointments, test reports, HA trials and sales matched by phone number).
 // Files, reports and therapy plans: worker/documents.js. AI reading and drafting: worker/ai.js.
 import {
+  DIVISIONS,
   DIVISION_IDS,
+  PRIORITY_LANES,
   cleanPhone,
   indiaToday,
   normalizeEntry,
   normalizePatient,
+  priorityLane,
   regNo,
   stageNote,
+  summarize,
 } from '../shared/clinical.js';
 import { AI_ROUTES } from './ai.js';
 import { HttpError, audit as auditLog, check, clinicScope, json, loadPatient, nowSql, readJson } from './common.js';
@@ -66,6 +70,48 @@ async function listPatients(ctx) {
       LIMIT 2000`,
   ).bind(...args).all();
   return json({ patients: results });
+}
+
+// Caseload insights for the dashboard: per division, the load and status, ready to render.
+async function insights(ctx) {
+  const today = indiaToday();
+  const scope = clinicScope(ctx.user);
+  const out = { today, divisions: [] };
+  for (const divId of DIVISION_IDS) {
+    const div = DIVISIONS[divId];
+    const where = ['division = ?'];
+    const args = [divId];
+    if (scope) { where.push('(clinic_id = ? OR clinic_id IS NULL)'); args.push(scope); }
+    let rows = [];
+    try {
+      const r = await ctx.db.prepare(`SELECT status, stage, diagnosis, priority, next_review, dob, age_years, created_at FROM clin_patients WHERE ${where.join(' AND ')} LIMIT 5000`).bind(...args).all();
+      rows = r.results;
+    } catch (err) {
+      if (/no such table/i.test(String(err?.message))) return json({ today, divisions: [], ready: false });
+      throw err;
+    }
+    const active = rows.filter((p) => p.status === 'active');
+    const kpi = summarize(rows, today);
+    const counts = (list, keyOf, lanes) => {
+      const map = Object.fromEntries(lanes.map(([id, label]) => [id, { id, label, count: 0 }]));
+      for (const p of list) { const k = keyOf(p); if (map[k]) map[k].count += 1; }
+      return Object.values(map);
+    };
+    out.divisions.push({
+      id: divId,
+      label: div.label,
+      total: rows.length,
+      active: kpi.active,
+      newThisMonth: kpi.newThisMonth,
+      dueThisWeek: kpi.dueThisWeek,
+      overdue: kpi.overdue,
+      discharged: rows.length - active.length,
+      byStage: counts(active, (p) => p.stage, div.stages).filter((s) => s.id !== 'discharged'),
+      byDiagnosis: counts(active, (p) => p.diagnosis, div.diagnoses).filter((d) => d.count > 0).sort((a, b) => b.count - a.count).slice(0, 6),
+      byPriority: counts(active, (p) => priorityLane(p, today), PRIORITY_LANES).filter((l) => l.count > 0),
+    });
+  }
+  return json({ ...out, ready: true });
 }
 
 async function createPatient(ctx) {
@@ -198,6 +244,7 @@ async function deleteEntry(ctx, id) {
 
 const ROUTES = [
   ['GET', /^\/me$/, me],
+  ['GET', /^\/insights$/, insights],
   ['GET', /^\/patients$/, listPatients],
   ['POST', /^\/patients$/, createPatient],
   ['GET', /^\/patients\/(\d+)$/, getPatient],
