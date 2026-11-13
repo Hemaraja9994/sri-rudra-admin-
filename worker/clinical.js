@@ -1,7 +1,8 @@
 // API for the Audiology and SLP clinician dashboards.
 // Sign-in is the admin portal's own: every request is checked against the portal's /api/session.
-// Data lives in new tables (clin_patients, clin_entries) of the portal database; existing tables
-// are only read (appointments, test reports, HA trials and sales matched by phone number).
+// Data lives in new tables (clin_*) of the portal database; existing tables are only read
+// (appointments, test reports, HA trials and sales matched by phone number).
+// Files, reports and therapy plans: worker/documents.js. AI reading and drafting: worker/ai.js.
 import {
   DIVISION_IDS,
   cleanPhone,
@@ -11,37 +12,11 @@ import {
   regNo,
   stageNote,
 } from '../shared/clinical.js';
+import { AI_ROUTES } from './ai.js';
+import { HttpError, audit as auditLog, check, clinicScope, json, loadPatient, nowSql, readJson } from './common.js';
+import { DOCUMENT_ROUTES, documentLists, removePatientDocuments } from './documents.js';
 
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
-
-async function readJson(request) {
-  if (!(request.headers.get('content-type') || '').includes('application/json')) throw new HttpError(415, 'Send JSON.');
-  try {
-    return await request.json();
-  } catch {
-    throw new HttpError(400, 'That request could not be read.');
-  }
-}
-
-function check(fn, input) {
-  try {
-    return fn(input);
-  } catch (err) {
-    throw new HttpError(400, err.message);
-  }
-}
+const audit = (ctx, action, entityId, meta) => auditLog(ctx, action, 'clin_patients', entityId, meta);
 
 // The portal decides who is signed in; we only ask it.
 // Asks the portal whether this visitor is signed in. On the live address the question goes to that
@@ -60,34 +35,7 @@ export async function portalSession(request, env) {
   return data && data.user ? data : null;
 }
 
-// Staff limited to one clinic only see that clinic's patients.
-function clinicScope(user) {
-  return user.canSeeAllClinics || !user.clinic_id ? null : Number(user.clinic_id);
-}
-
 const PATIENT_FIELDS = ['division', 'name', 'phone', 'sex', 'dob', 'age_years', 'file_no', 'clinic_id', 'diagnosis', 'diagnosis_detail', 'ear', 'degree', 'stage', 'priority', 'next_review', 'referred_by', 'clinician', 'notes', 'status'];
-
-async function audit(ctx, action, entityId, meta) {
-  try {
-    await ctx.db.prepare('INSERT INTO audit_log (user_id, clinic_id, action, entity, entity_id, meta_json, ip) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(ctx.user.id ?? null, ctx.user.clinic_id ?? null, action, 'clin_patients', String(entityId), meta ? JSON.stringify(meta) : null, ctx.request.headers.get('cf-connecting-ip'))
-      .run();
-  } catch (err) {
-    console.error('audit failed', err?.message);
-  }
-}
-
-async function loadPatient(ctx, id) {
-  const row = await ctx.db.prepare('SELECT * FROM clin_patients WHERE id = ?').bind(Number(id)).first();
-  if (!row) throw new HttpError(404, 'Patient not found.');
-  const scope = clinicScope(ctx.user);
-  if (scope && row.clinic_id && row.clinic_id !== scope) throw new HttpError(404, 'Patient not found.');
-  return row;
-}
-
-function nowSql() {
-  return new Date().toISOString().slice(0, 19).replace('T', ' ');
-}
 
 // ---------- handlers ----------
 
@@ -147,7 +95,8 @@ async function getPatient(ctx, id) {
   const { results: entries } = await ctx.db.prepare(
     'SELECT * FROM clin_entries WHERE patient_id = ? ORDER BY entry_date DESC, id DESC LIMIT 500',
   ).bind(patient.id).all();
-  return json({ patient: { ...patient, clinic_name: clinic?.name ?? null }, entries, linked: await linkedRecords(ctx, patient) });
+  const [linked, documents] = await Promise.all([linkedRecords(ctx, patient), documentLists(ctx, patient)]);
+  return json({ patient: { ...patient, clinic_name: clinic?.name ?? null }, entries, linked, ...documents });
 }
 
 // The portal's own records for the same phone number (last 10 digits), newest first.
@@ -205,6 +154,7 @@ async function updatePatient(ctx, id) {
 async function deletePatient(ctx, id) {
   if (!ctx.user.canManageUsers) throw new HttpError(403, 'Only the clinic owner or an admin can delete a patient.');
   const current = await loadPatient(ctx, id);
+  await removePatientDocuments(ctx, current.id);
   await ctx.db.batch([
     ctx.db.prepare('DELETE FROM clin_entries WHERE patient_id = ?').bind(current.id),
     ctx.db.prepare('DELETE FROM clin_patients WHERE id = ?').bind(current.id),
@@ -255,6 +205,8 @@ const ROUTES = [
   ['DELETE', /^\/patients\/(\d+)$/, deletePatient],
   ['POST', /^\/patients\/(\d+)\/entries$/, addEntry],
   ['DELETE', /^\/entries\/(\d+)$/, deleteEntry],
+  ...DOCUMENT_ROUTES,
+  ...AI_ROUTES,
 ];
 
 export async function handleClinicalApi(request, env, url) {
@@ -270,7 +222,7 @@ export async function handleClinicalApi(request, env, url) {
   } catch (err) {
     if (err instanceof HttpError) return json({ error: { message: err.message } }, err.status);
     if (/no such table/i.test(String(err?.message))) {
-      return json({ error: { message: 'The clinical tables are not set up yet. Run migrations/0001_clinical.sql (see README).' } }, 503);
+      return json({ error: { message: 'The clinical tables are not set up yet. Run the database step in the README (migrations/0001 and 0002).' } }, 503);
     }
     console.error(err);
     return json({ error: { message: 'Something went wrong. Please try again.' } }, 500);

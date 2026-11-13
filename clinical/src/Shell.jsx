@@ -18,6 +18,7 @@ const PORTAL_NAV = [
   { section: 'Clinical', clinical: true },
   { to: '/clinical/audiology', label: 'Audiology', clinical: 'audiology' },
   { to: '/clinical/slp', label: 'Speech-Language Pathology', clinical: 'slp' },
+  { to: '/clinical/master', label: 'Master control', clinical: 'master', adminOnly: true },
   { section: 'Setup', adminOnly: true },
   { to: '/clinics', label: 'Clinics', adminOnly: true },
   { to: '/brands', label: 'Brands', adminOnly: true },
@@ -70,8 +71,9 @@ export default function Shell({ session, divisionId, children }) {
           if (item.adminOnly && !user.canManageUsers) return null;
           if (item.section) return <div key={`s${i}`} className="sidebar__sect">{item.section}</div>;
           if (item.clinical) {
+            const active = item.clinical === 'master' ? window.location.pathname.startsWith('/clinical/master') : (item.clinical === divisionId && !window.location.pathname.startsWith('/clinical/master'));
             return (
-              <a key={item.to} {...linkTo(item.to)} className={item.clinical === divisionId ? 'active' : ''} aria-current={item.clinical === divisionId ? 'page' : undefined}>
+              <a key={item.to} {...linkTo(item.to)} className={active ? 'active' : ''} aria-current={active ? 'page' : undefined}>
                 {item.label}
               </a>
             );

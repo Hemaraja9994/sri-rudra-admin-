@@ -12,9 +12,12 @@ import {
   labelOf,
   prettyDate,
 } from '../../shared/clinical.js';
-import { api, linkTo, navigate } from './api.js';
+import { templatesFor } from '../../shared/reports.js';
+import { PER_WEEK, defaultPlanTitle, scheduleLine } from '../../shared/plans.js';
+import { api, fileUrl, linkTo, navigate, uploadFile } from './api.js';
 import PatientForm from './PatientForm.jsx';
-import { Field, Icon, Input, Notice, PriorityTag, ReviewText, Select, TextArea, whatsappHref } from './ui.jsx';
+import { readForAi } from './readfile.js';
+import { AsyncButton, Field, Icon, Input, Modal, Notice, PriorityTag, ReviewText, Select, TextArea, whatsappHref } from './ui.jsx';
 
 const REVIEW_PICKS = [['1 week', 7], ['2 weeks', 14], ['1 month', 30], ['3 months', 91]];
 
@@ -36,7 +39,7 @@ export default function PatientPage({ divisionId, id, session }) {
   );
   if (!data) return <>{back}<Notice>{error}</Notice>{!error && <div className="empty">Loading…</div>}</>;
 
-  const { patient: p, entries, linked } = data;
+  const { patient: p, entries, linked, files = [], reports = [], plans = [], documentsReady = true } = data;
   const div = DIVISIONS[p.division];
   if (p.division !== divisionId) {
     window.history.replaceState({}, '', `/clinical/${p.division}/patients/${p.id}`);
@@ -119,6 +122,7 @@ export default function PatientPage({ divisionId, id, session }) {
 
       <div className="clin-cols">
         <div className="clin-col-main">
+          <ReportsPlans patient={p} reports={reports} plans={plans} documentsReady={documentsReady} today={today} onChange={load} />
           <AddEntry patient={p} today={today} onSaved={load} />
           <section className="card clin-timeline">
             <h3>Sessions, tests and notes</h3>
@@ -186,6 +190,8 @@ export default function PatientPage({ divisionId, id, session }) {
               {p.next_review && <button type="button" disabled={saving} onClick={() => patch({ next_review: null })}>Clear</button>}
             </div>
           </section>
+
+          <FilesCard patient={p} files={files} session={session} onChange={load} />
 
           <Linked linked={linked} hasPhone={(p.phone || '').length >= 10} />
 
@@ -256,6 +262,184 @@ function AddEntry({ patient, today, onSaved }) {
       </div>
       <Notice>{error}</Notice>
     </form>
+  );
+}
+
+const REPORT_STATUS = { draft: 'Draft', final: 'Final' };
+const PLAN_STATUS = { draft: 'Draft', active: 'In progress', completed: 'Completed' };
+
+function ReportsPlans({ patient, reports, plans, documentsReady, today, onChange }) {
+  const [newReport, setNewReport] = useState(false);
+  const [newPlan, setNewPlan] = useState(false);
+  const templates = templatesFor(patient.division);
+
+  if (!documentsReady) {
+    return (
+      <section className="card">
+        <h3>Reports &amp; therapy plans</h3>
+        <Notice kind="warn">Reports and plans need a one-time database step. Ask your administrator to run the update in the README (migrations 0002).</Notice>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card clin-docs">
+      <div className="clin-docs__head">
+        <h3>Diagnostic reports</h3>
+        <button type="button" className="btn btn--secondary btn--sm" onClick={() => setNewReport(true)}><Icon name="plus" size={15} />New report</button>
+      </div>
+      {reports.length === 0 ? (
+        <p className="muted">No reports yet. Start one from a template — the AI can draft the impression and recommendations for you to check.</p>
+      ) : (
+        <ul className="clin-doclist">
+          {reports.map((r) => (
+            <li key={r.id}>
+              <a {...linkTo(`/clinical/${patient.division}/patients/${patient.id}/reports/${r.id}`)}>
+                <Icon name="report" size={18} />
+                <span className="clin-doclist__main">
+                  <b>{r.title}</b>
+                  <span className="muted">{r.report_no} · {prettyDate(r.report_date)}</span>
+                </span>
+                <span className={`tag ${r.status === 'final' ? 'tag--ok' : ''}`}>{REPORT_STATUS[r.status]}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="clin-docs__head clin-docs__head--sep">
+        <h3>Therapy plans</h3>
+        <button type="button" className="btn btn--secondary btn--sm" onClick={() => setNewPlan(true)}><Icon name="plus" size={15} />New plan</button>
+      </div>
+      {plans.length === 0 ? (
+        <p className="muted">No therapy plans yet. Build a session-by-session plan; the AI drafts the goals, activities and home practice.</p>
+      ) : (
+        <ul className="clin-doclist">
+          {plans.map((pl) => (
+            <li key={pl.id}>
+              <a {...linkTo(`/clinical/${patient.division}/patients/${patient.id}/plans/${pl.id}`)}>
+                <Icon name="plan" size={18} />
+                <span className="clin-doclist__main">
+                  <b>{pl.title}</b>
+                  <span className="muted">{scheduleLine(pl) || `${pl.sessions_count} sessions`} · {pl.done}/{pl.sessions_count} done</span>
+                </span>
+                <span className={`tag ${pl.status === 'completed' ? 'tag--ok' : ''}`}>{PLAN_STATUS[pl.status]}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {newReport && <NewReport patient={patient} templates={templates} today={today} onClose={(id) => { setNewReport(false); if (id) navigate(`/clinical/${patient.division}/patients/${patient.id}/reports/${id}`); }} />}
+      {newPlan && <NewPlan patient={patient} reports={reports} today={today} onClose={(id) => { setNewPlan(false); if (id) navigate(`/clinical/${patient.division}/patients/${patient.id}/plans/${id}`); }} />}
+    </section>
+  );
+}
+
+function NewReport({ patient, templates, today, onClose }) {
+  const [template, setTemplate] = useState(templates[0]?.id || '');
+  const [date, setDate] = useState(today);
+  const [error, setError] = useState('');
+  return (
+    <Modal title="New diagnostic report" onClose={() => onClose(null)}>
+      <Field label="Report type"><Select value={template} onChange={setTemplate} options={templates.map((t) => [t.id, t.name])} /></Field>
+      <Field label="Report date"><Input type="date" value={date} onChange={setDate} max={addDays(today, 1)} /></Field>
+      <Notice>{error}</Notice>
+      <div className="modal__foot">
+        <span className="spacer" />
+        <button type="button" className="btn btn--secondary" onClick={() => onClose(null)}>Cancel</button>
+        <AsyncButton busyLabel="Creating…" onClick={async () => {
+          try { const { id } = await api(`/patients/${patient.id}/reports`, { method: 'POST', body: { template, report_date: date } }); onClose(id); } catch (e) { setError(e.message); }
+        }}>Create report</AsyncButton>
+      </div>
+    </Modal>
+  );
+}
+
+function NewPlan({ patient, reports, today, onClose }) {
+  const dx = DIVISIONS[patient.division].diagnoses.find(([k]) => k === patient.diagnosis);
+  const [form, setForm] = useState({
+    title: defaultPlanTitle(12, dx?.[1]), sessions_count: 12, minutes: 45, per_week: 2, start_date: today,
+    report_id: reports[0]?.id ? String(reports[0].id) : '', focus: '',
+  });
+  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const [error, setError] = useState('');
+  return (
+    <Modal title="New therapy plan" sub="Set the shape of the plan; the AI then drafts the goals, sessions and home practice for you to edit." onClose={() => onClose(null)} wide>
+      <Field label="Plan title"><Input value={form.title} onChange={set('title')} /></Field>
+      <div className="grid3">
+        <Field label="Number of sessions"><Input value={form.sessions_count} onChange={set('sessions_count')} inputMode="numeric" /></Field>
+        <Field label="Minutes per session"><Input value={form.minutes} onChange={set('minutes')} inputMode="numeric" /></Field>
+        <Field label="How often"><Select value={String(form.per_week)} onChange={set('per_week')} options={PER_WEEK.map(([v, l]) => [String(v), l])} /></Field>
+      </div>
+      <div className="grid2">
+        <Field label="Start date"><Input type="date" value={form.start_date} onChange={set('start_date')} /></Field>
+        {reports.length > 0 && <Field label="Base on report" hint="The AI uses this report's findings."><Select value={form.report_id} onChange={set('report_id')} options={reports.map((r) => [String(r.id), `${r.title} · ${prettyDate(r.report_date)}`])} placeholder="None" /></Field>}
+      </div>
+      <Field label="Approach / focus (optional)" hint="Anything the AI should keep in mind — technique, language of stimuli, constraints."><TextArea value={form.focus} onChange={set('focus')} rows={2} /></Field>
+      <Notice>{error}</Notice>
+      <div className="modal__foot">
+        <span className="spacer" />
+        <button type="button" className="btn btn--secondary" onClick={() => onClose(null)}>Cancel</button>
+        <AsyncButton busyLabel="Creating…" onClick={async () => {
+          try {
+            const body = { ...form, sessions_count: Number(form.sessions_count), minutes: Number(form.minutes), per_week: Number(form.per_week), report_id: form.report_id || null };
+            const { id } = await api(`/patients/${patient.id}/plans`, { method: 'POST', body });
+            onClose(id);
+          } catch (e) { setError(e.message); }
+        }}>Create plan</AsyncButton>
+      </div>
+    </Modal>
+  );
+}
+
+function FilesCard({ patient, files, session, onChange }) {
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  const ref = React.useRef(null);
+
+  async function add(list) {
+    setError('');
+    const picked = Array.from(list).slice(0, 10);
+    for (const file of picked) {
+      setBusy(`Uploading ${file.name}…`);
+      try {
+        await uploadFile(patient.id, file, { name: file.name }); // eslint-disable-line no-await-in-loop
+      } catch (e) { setError(e.message); }
+    }
+    setBusy('');
+    onChange();
+  }
+
+  return (
+    <section className="card clin-files">
+      <div className="clin-docs__head">
+        <h3>Files</h3>
+        <button type="button" className="btn btn--secondary btn--sm" onClick={() => ref.current?.click()}><Icon name="upload" size={15} />Add file</button>
+        <input ref={ref} type="file" accept="image/*,application/pdf,.pdf,.txt,.doc,.docx" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
+      </div>
+      {busy && <p className="clin-aistatus"><span className="clin-spin" />{busy}</p>}
+      <Notice>{error}</Notice>
+      {files.length === 0 ? (
+        <p className="muted">No files yet. Upload case sheets, reports or photos — they stay with this patient.</p>
+      ) : (
+        <ul className="clin-filelist clin-filelist--saved">
+          {files.map((f) => (
+            <li key={f.id}>
+              <Icon name="file" size={16} />
+              <a className="clin-filelist__name" href={fileUrl(f.id)} target="_blank" rel="noreferrer" title={f.file_name}>{f.file_name}</a>
+              <a className="clin-filelist__act" href={fileUrl(f.id, { download: true })} aria-label="Download" title="Download"><Icon name="download" size={15} /></a>
+              {(session.user.canManageUsers || f.uploaded_by === session.user.id) && (
+                <button type="button" aria-label="Delete file" title="Delete"
+                  onClick={async () => { if (!window.confirm(`Delete ${f.file_name}?`)) return; try { await api(`/files/${f.id}`, { method: 'DELETE' }); onChange(); } catch (e) { setError(e.message); } }}>
+                  <Icon name="trash" size={15} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
