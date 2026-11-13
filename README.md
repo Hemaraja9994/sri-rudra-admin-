@@ -19,14 +19,28 @@ The portal's source code is not available, so this is a small Cloudflare Worker 
 - **Printing** is untouched: the theme only applies on screen.
 - **Theme**: navy `#173451` and orange `#f46b20` with Carlito, after the DegluTech workspace.
 
-## Addresses
+## Address
 
-- **Preview** (staff unaffected): https://sri-rudra-portal-plus.hemarajanayaka.workers.dev — sign in
-  with your normal portal username and password; requests go to sri-rudra-portal.pages.dev.
-- **Live** (after approval): Cloudflare → Workers & Pages → `sri-rudra-portal-plus` → Settings →
-  Domains & Routes → Add → Route `admin.srirudraspeechandhearing.com/*`, zone
-  `srirudraspeechandhearing.com`, failure mode **Fail open**.
-- **Undo**: delete that route. The portal goes straight back to the old look; the clinical tables stay.
+Everything lives on the clinic's own domain:
+
+| Address | What |
+|---|---|
+| https://srirudraspeechandhearing.com | public website and its staff area (CRM) — repo `Clinic_Web` |
+| https://admin.srirudraspeechandhearing.com | daily portal, new look and clinical dashboards — this Worker |
+
+- This Worker has **no other address**: `workers_dev = false` and `preview_urls = false`.
+- It runs through the route `admin.srirudraspeechandhearing.com/*` (zone `srirudraspeechandhearing.com`,
+  failure mode **Fail open**), set in Cloudflare → Workers & Pages → `sri-rudra-portal-plus` → Domains.
+  The route is deliberately not in `wrangler.toml`: a `routes` entry there would make every deploy
+  replace it. It shows under "Routes", not "Custom domains", because the portal itself still owns the
+  address and this Worker sits in front of it.
+- Behind the scenes the Worker asks the portal's built-in Cloudflare address (`PORTAL_ORIGIN`,
+  sri-rudra-portal.pages.dev) whether a visitor is signed in. Staff never see that address; keep it
+  reachable.
+- **Undo the new look**: delete the route. The portal goes straight back to the old look; the clinical
+  tables stay.
+- **Undo a bad update**: Cloudflare → `sri-rudra-portal-plus` → Deployments → the previous version →
+  Rollback.
 
 ## One-time database step
 
@@ -43,4 +57,6 @@ npx wrangler dev --var PORTAL_ORIGIN:http://127.0.0.1:8790   # against a local s
 ```
 
 Cloudflare builds and deploys this repository on every push to `main`
-(Workers Builds: build `npm run build`, deploy `npx wrangler deploy`).
+(Workers Builds: build `npm run build`, deploy `npx wrangler deploy`). There is no preview address,
+so a push to `main` goes **straight to the live portal**: test locally with the stand-in portal first,
+and push only once the change is approved.
