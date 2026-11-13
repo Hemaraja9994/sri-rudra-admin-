@@ -9,6 +9,10 @@
 //   audiogram  pure-tone thresholds, PTA worked out      data[key] = { ac_r: {250: '20', ...}, ... }
 //   narrative  paragraph text (AI can draft)             data[key] = 'text'
 //   list       one item per line (AI can draft)          data[key] = ['item', ...]
+//   protocol   a standard-of-care checklist (ASHA)       data[key] = ['step id', ...]  (ticked steps)
+//
+// A section marked `optional: true` can be left out of a report: the clinician includes only the
+// tests that were done. data.included is the set of optional section keys that are in the report.
 
 import { DEGREES, addDays, isIsoDate, labelOf } from './clinical.js';
 
@@ -35,11 +39,13 @@ export const CASE_FIELDS = [
   ['languages', 'Languages'],
 ];
 
-const referral = { key: 'referral', title: 'Referral information', kind: 'fields', fields: [['source', 'Referral source'], ['informant', 'Informant'], ['reason', 'Reason for referral', 'textarea']] };
-const background = { key: 'background', title: 'Background information', kind: 'narrative', ai: true, hint: 'Who the patient is, why they came, and the history in two or three sentences.' };
+const referral = { key: 'referral', title: 'Referral information', kind: 'fields', optional: true, fields: [['source', 'Referral source'], ['informant', 'Informant'], ['reason', 'Reason for referral', 'textarea']] };
+const background = { key: 'background', title: 'Background information', kind: 'narrative', optional: true, ai: true, hint: 'Who the patient is, why they came, and the history in two or three sentences.' };
 const complaints = { key: 'complaints', title: 'Brief complaint', kind: 'list', ai: true, hint: 'One complaint per line.' };
 const diagnosis = { key: 'diagnosis', title: 'Provisional diagnosis', kind: 'narrative', ai: true };
-const recommendations = { key: 'recommendations', title: 'Recommendations', kind: 'list', numbered: true, ai: true, hint: 'One recommendation per line.' };
+const recommendations = { key: 'recommendations', title: 'Recommendations', kind: 'list', numbered: true, ai: true, hint: 'One recommendation per line. Common: ENT review, HAT & fitting, follow-up.' };
+// Audiology reports give the provisional diagnosis per ear, as the clinic writes it.
+const audDiagnosis = { key: 'diagnosis', title: 'Provisional diagnosis', kind: 'fields', fields: [['right', 'Right ear'], ['left', 'Left ear'], ['both', 'Both ears / overall']] };
 const RL = ['Right', 'Left'];
 
 // ---------- the templates ----------
@@ -52,23 +58,49 @@ export const TEMPLATES = [
     name: 'Audiological evaluation',
     title: 'Audiological Evaluation Report',
     headerDate: 'Date of testing',
+    // The common reports follow the clinic's own layout; the detailed, standards-based sections
+    // (full audiogram with masking per BSA, ABR descriptors, VEMP, tinnitus matching) are optional.
     sections: [
       referral,
       background,
       complaints,
-      { key: 'history', title: 'Case history', kind: 'fields', fields: [
+      { key: 'history', title: 'Case history', kind: 'fields', optional: true, fields: [
         ['onset', 'Onset'], ['duration', 'Duration'], ['ears', 'Ear(s) affected'], ['tinnitus', 'Tinnitus'],
         ['vertigo', 'Vertigo / imbalance'], ['discharge', 'Ear discharge / pain'], ['noise', 'Noise exposure'],
         ['family', 'Family history'], ['medical', 'Medical history'], ['aids', 'Hearing aid use'],
       ] },
-      { key: 'otoscopy', title: 'Otoscopic examination', kind: 'table', columns: ['Findings'], rows: ['Right ear', 'Left ear'] },
-      { key: 'pta', title: 'Pure-tone audiometry', kind: 'audiogram', hint: 'Thresholds in dB HL. PTA is the average of 500, 1000, 2000 and 4000 Hz; degree follows Clark (1981).' },
-      { key: 'pta_notes', title: 'Audiogram interpretation', kind: 'narrative', ai: true, hint: 'Type and degree of loss per ear, configuration, masking used.' },
-      { key: 'speech', title: 'Speech audiometry', kind: 'table', columns: RL, rows: ['SRT (dB HL)', 'SDS (%) and level', 'MCL (dB HL)', 'UCL (dB HL)'] },
-      { key: 'immittance', title: 'Immittance audiometry', kind: 'table', columns: RL, rows: ['Tympanogram type', 'Peak pressure (daPa)', 'Static compliance (ml)', 'Ear canal volume (ml)', 'Ipsilateral reflexes', 'Contralateral reflexes'] },
-      { key: 'special', title: 'Special tests', kind: 'table', columns: [...RL, 'Remarks'], rows: ['OAE (DPOAE / TEOAE)', 'ABR', 'ASSR', 'Tuning fork (Rinne / Weber)', 'Tinnitus evaluation'] },
-      { key: 'impression', title: 'Audiological impression', kind: 'narrative', ai: true },
-      diagnosis,
+      { key: 'otoscopy', title: 'Otoscopic examination', kind: 'table', optional: true, columns: ['Findings'], rows: ['Right ear', 'Left ear'] },
+      { key: 'tuningfork', title: 'Tuning fork tests', kind: 'table', optional: true, columns: RL, rows: ['Rinne', 'Weber', 'Absolute bone conduction (ABC)'] },
+      // Core result table, exactly as the clinic reports it.
+      { key: 'pta_speech', title: 'Pure-tone & speech audiometry', kind: 'table', columns: RL, rows: ['PTA (dB HL)', 'SRT (dB HL)', 'SDS (%)'] },
+      { key: 'audiogram', title: 'Detailed audiogram (thresholds)', kind: 'audiogram', optional: true, hint: 'Air and bone thresholds in dB HL, with masking (BSA). PTA is the average of 500, 1000, 2000 and 4000 Hz; degree follows Clark (1981).' },
+      { key: 'pta_notes', title: 'Audiogram interpretation', kind: 'narrative', optional: true, ai: true, hint: 'Type, degree and configuration of loss per ear; masking used (BSA descriptors).' },
+      // Immittance as the clinic writes it: an impression per ear. Detailed values are optional.
+      { key: 'immittance', title: 'Immittance audiometry', kind: 'fields', fields: [
+        ['right', 'Right ear impression', 'textarea'], ['left', 'Left ear impression', 'textarea'],
+      ], hint: 'e.g. "A"-type tympanogram with ipsilateral reflexes absent, suggestive of normal middle-ear function.' },
+      { key: 'immittance_values', title: 'Immittance — detailed values', kind: 'table', optional: true, columns: RL, rows: ['Tympanogram type', 'Peak pressure (daPa)', 'Static compliance (ml)', 'Ear canal volume (ml)', 'Ipsilateral reflexes', 'Contralateral reflexes'] },
+      { key: 'oae', title: 'Otoacoustic emissions (OAE)', kind: 'fields', optional: true, fields: [
+        ['right', 'Right ear', 'textarea'], ['left', 'Left ear', 'textarea'],
+      ], hint: 'e.g. Diagnostic DPOAEs present, suggestive of normal outer-hair-cell function.' },
+      { key: 'abr', title: 'Auditory brainstem response (ABR / BERA)', kind: 'fields', optional: true, fields: [
+        ['protocol', 'Protocol (stimulus, rate, polarity, state)'],
+        ['right', 'Right ear — findings', 'textarea'], ['right_threshold', 'Right ear — estimated threshold'],
+        ['left', 'Left ear — findings', 'textarea'], ['left_threshold', 'Left ear — estimated threshold'],
+      ] },
+      { key: 'assr', title: 'Auditory steady-state response (ASSR)', kind: 'table', optional: true, columns: ['500 Hz', '1000 Hz', '2000 Hz', '4000 Hz'], rows: ['Right ear (dB HL)', 'Left ear (dB HL)'] },
+      { key: 'vemp', title: 'Vestibular evoked myogenic potentials (VEMP)', kind: 'fields', optional: true, fields: [
+        ['protocol', 'Protocol (cVEMP / oVEMP, stimulus, rate)'],
+        ['right', 'Right ear — findings', 'textarea'], ['left', 'Left ear — findings', 'textarea'],
+        ['right_impression', 'Right ear — impression'], ['left_impression', 'Left ear — impression'],
+      ] },
+      { key: 'tinnitus', title: 'Tinnitus evaluation', kind: 'table', optional: true, columns: RL, rows: [
+        'Pitch matching', 'Loudness matching', 'Masker stimulus', 'Masker loudness', 'Residual inhibition', 'Tinnitus type',
+      ] },
+      { key: 'electro', title: 'Other electrophysiology', kind: 'table', optional: true, columns: ['Findings'], rows: ['Electrocochleography (ECochG)', 'Cortical / late latency response (LLR / P300)', 'Acoustic reflex decay'] },
+      { key: 'protocol', title: 'Assessment protocol (ASHA / BSA)', kind: 'protocol', optional: true, protocol: 'aud_eval' },
+      { key: 'impression', title: 'Audiological impression', kind: 'narrative', optional: true, ai: true, hint: 'Overall impression; you can edit the auto-impression freely.' },
+      audDiagnosis,
       recommendations,
     ],
   },
@@ -103,8 +135,9 @@ export const TEMPLATES = [
       { key: 'measures', title: 'Clinical voice measures', kind: 'table', columns: ['Value', 'Remarks'], rows: [
         'MPD /a/ (s)', 'MPD /i/ (s)', 'MPD /u/ (s)', 's/z ratio', 'Mean F0 (Hz)', 'Jitter (%)', 'Shimmer (%)', 'HNR (dB)', 'VHI-30 total',
       ] },
-      { key: 'imaging', title: 'Visual imaging', kind: 'narrative' },
+      { key: 'imaging', title: 'Visual imaging', kind: 'narrative', optional: true },
       { key: 'observations', title: 'Informal observations', kind: 'list' },
+      { key: 'protocol', title: 'Assessment protocol (ASHA)', kind: 'protocol', optional: true, protocol: 'slp_voice' },
       diagnosis,
       recommendations,
     ],
@@ -130,6 +163,7 @@ export const TEMPLATES = [
       { key: 'attitude', title: 'Attitudes and feelings', kind: 'fields', fields: [['tool', 'Measure used (e.g. S-24, OASES)'], ['score', 'Score'], ['impression', 'Impression', 'textarea']] },
       { key: 'rate', title: 'Rate of speech', kind: 'fields', fields: [['spm', 'Speech rate (syllables per minute)'], ['ar', 'Articulatory rate']] },
       { key: 'other', title: 'Speech, language and voice', kind: 'narrative' },
+      { key: 'protocol', title: 'Assessment protocol (ASHA)', kind: 'protocol', optional: true, protocol: 'slp_fluency' },
       diagnosis,
       recommendations,
     ],
@@ -152,7 +186,8 @@ export const TEMPLATES = [
       { key: 'language', title: 'Language assessment', kind: 'table', columns: ['Test / method', 'Findings', 'Language age'], rows: ['Receptive language', 'Expressive language', 'Pragmatics / social communication', 'Play and cognition'] },
       { key: 'artic', title: 'Speech sound assessment', kind: 'freetable', columns: ['Sound / pattern', 'Initial', 'Medial', 'Final', 'Error type'], minRows: 4 },
       { key: 'tests', title: 'Standardised tests used', kind: 'fields', fields: [['used', 'Tests (e.g. REELS, 3D-LAT, ALD, articulation test)', 'textarea'], ['scores', 'Scores and age equivalents', 'textarea']] },
-      { key: 'autism', title: 'Autism / social communication screening', kind: 'fields', fields: [['tool', 'Tool (e.g. ISAA, INCLEN, M-CHAT)'], ['score', 'Score'], ['impression', 'Impression', 'textarea']] },
+      { key: 'autism', title: 'Autism / social communication screening', kind: 'fields', optional: true, fields: [['tool', 'Tool (e.g. ISAA, INCLEN, M-CHAT)'], ['score', 'Score'], ['impression', 'Impression', 'textarea']] },
+      { key: 'protocol', title: 'Assessment protocol (ASHA)', kind: 'protocol', optional: true, protocol: 'slp_child' },
       { key: 'impression', title: 'Clinical impression', kind: 'narrative', ai: true },
       diagnosis,
       recommendations,
@@ -184,16 +219,131 @@ export const TEMPLATES = [
       { key: 'swallow', title: 'Clinical swallowing evaluation', kind: 'table', columns: ['Observations', 'Signs of aspiration'], rows: [
         'Thin liquids (IDDSI 0)', 'Mildly thick (IDDSI 2)', 'Moderately thick (IDDSI 3)', 'Puree (IDDSI 4)', 'Soft & bite-sized (IDDSI 6)', 'Regular (IDDSI 7)',
       ] },
-      { key: 'swallow_scales', title: 'Swallowing scales and instrumental findings', kind: 'fields', fields: [
+      { key: 'swallow_scales', title: 'Swallowing scales and instrumental findings', kind: 'fields', optional: true, fields: [
         ['screen', 'Screening tool and score (e.g. MASA, GUSS, EAT-10)'], ['fois', 'FOIS level'], ['instrumental', 'FEES / VFSS findings', 'textarea'],
         ['pas', 'Penetration-Aspiration Scale'], ['diet', 'Recommended diet (IDDSI levels)'],
       ] },
+      { key: 'protocol', title: 'Assessment protocol (ASHA)', kind: 'protocol', optional: true, protocol: 'slp_adult' },
       { key: 'impression', title: 'Clinical impression', kind: 'narrative', ai: true },
       diagnosis,
       recommendations,
     ],
   },
 ];
+
+// ASHA-aligned assessment protocols (standard components of a thorough evaluation, disorder-wise).
+// These are the clinical steps a clinician ticks off; ticked steps print as the protocol followed.
+export const PROTOCOLS = {
+  aud_eval: {
+    title: 'Audiological assessment',
+    groups: [
+      { label: 'Core evaluation', steps: [
+        ['history', 'Case history and otological symptoms'],
+        ['otoscopy', 'Otoscopic examination'],
+        ['ptaac', 'Pure-tone air-conduction thresholds with masking'],
+        ['ptabc', 'Pure-tone bone-conduction thresholds with masking'],
+        ['speech', 'Speech audiometry (SRT and word recognition)'],
+        ['immittance', 'Tympanometry and acoustic reflexes'],
+        ['counsel', 'Counselling and report explained to the family'],
+      ] },
+      { label: 'When indicated', steps: [
+        ['oae', 'Otoacoustic emissions'],
+        ['abr', 'ABR / BERA (infants, difficult-to-test, retrocochlear screen)'],
+        ['assr', 'ASSR for frequency-specific thresholds'],
+        ['referral', 'Onward referral (ENT, imaging, early intervention)'],
+      ] },
+    ],
+  },
+  slp_voice: {
+    title: 'Voice assessment',
+    groups: [{ label: 'Components', steps: [
+      ['history', 'Case history and vocal demands'],
+      ['laryngeal', 'Laryngeal / ENT imaging findings reviewed'],
+      ['perceptual', 'Auditory-perceptual evaluation (GRBAS, CAPE-V)'],
+      ['acoustic', 'Acoustic measures (F0, jitter, shimmer, HNR)'],
+      ['aerodynamic', 'Aerodynamic measures (MPD, s/z ratio)'],
+      ['selfrating', 'Patient self-rating (VHI / V-RQOL)'],
+      ['ome', 'Oral-peripheral examination'],
+      ['stimulability', 'Stimulability / trial therapy'],
+      ['counsel', 'Counselling on vocal hygiene'],
+    ] }],
+  },
+  slp_fluency: {
+    title: 'Fluency assessment',
+    groups: [{ label: 'Components', steps: [
+      ['history', 'Case history and onset / course'],
+      ['samples', 'Speech samples across conversation, reading and monologue'],
+      ['frequency', 'Frequency of disfluencies (%SS)'],
+      ['duration', 'Duration of disfluencies'],
+      ['secondary', 'Secondary / concomitant behaviours'],
+      ['severity', 'Standardised severity (SSI-4)'],
+      ['attitude', 'Attitudes and impact (OASES, S-24)'],
+      ['rate', 'Rate of speech'],
+      ['stimulability', 'Stimulability / trial therapy'],
+    ] }],
+  },
+  slp_child: {
+    title: 'Paediatric speech-language assessment',
+    groups: [
+      { label: 'Speech sound disorder', steps: [
+        ['history', 'Birth, developmental and medical history'],
+        ['ome', 'Oral-peripheral mechanism examination'],
+        ['hearing', 'Hearing screening / audiological status'],
+        ['artic', 'Standardised articulation / phonology test'],
+        ['sample', 'Connected speech sample and intelligibility'],
+        ['stimulability', 'Stimulability testing'],
+      ] },
+      { label: 'Language disorder / delay', steps: [
+        ['receptive', 'Receptive language (standardised)'],
+        ['expressive', 'Expressive language (standardised)'],
+        ['sample', 'Language sample / MLU'],
+        ['play', 'Play, cognition and social communication'],
+        ['aac', 'AAC need considered'],
+      ] },
+      { label: 'Autism / social communication', steps: [
+        ['tool', 'Standardised autism tool (ISAA, INCLEN, M-CHAT)'],
+        ['observe', 'Structured social-communication observation'],
+        ['parent', 'Parent / caregiver report'],
+      ] },
+    ],
+  },
+  slp_adult: {
+    title: 'Adult communication and swallowing assessment',
+    groups: [
+      { label: 'Aphasia / language', steps: [
+        ['history', 'Medical history and lesion details reviewed'],
+        ['battery', 'Standardised aphasia battery (WAB / WAB-K)'],
+        ['modalities', 'Spontaneous speech, comprehension, repetition, naming'],
+        ['readwrite', 'Reading and writing'],
+        ['functional', 'Functional communication / participation'],
+      ] },
+      { label: 'Motor speech', steps: [
+        ['subsystems', 'Respiration, phonation, resonance, articulation, prosody'],
+        ['ddk', 'Diadochokinetic rate'],
+        ['intelligibility', 'Intelligibility rating'],
+        ['apraxia', 'Signs of apraxia of speech'],
+      ] },
+      { label: 'Dysphagia', steps: [
+        ['oralmotor', 'Oral-motor examination'],
+        ['screen', 'Validated swallow screen (MASA, GUSS, EAT-10)'],
+        ['trials', 'Clinical swallow trials across IDDSI levels'],
+        ['aspiration', 'Signs of penetration / aspiration'],
+        ['instrumental', 'Instrumental assessment (FEES / VFSS) when indicated'],
+        ['diet', 'Diet and safety recommendations (IDDSI)'],
+      ] },
+    ],
+  },
+};
+
+export function protocolFor(id) {
+  return PROTOCOLS[id] || null;
+}
+
+// Every [id, label] step of a protocol, flattened (for cleaning and printing).
+export function protocolSteps(id) {
+  const p = PROTOCOLS[id];
+  return p ? p.groups.flatMap((g) => g.steps) : [];
+}
 
 export function templatesFor(divisionId) {
   return TEMPLATES.filter((t) => t.division === divisionId);
@@ -276,13 +426,26 @@ function blankSection(section) {
     case 'table': return section.rows.map(() => section.columns.map(() => ''));
     case 'freetable': return Array.from({ length: section.minRows || 3 }, () => section.columns.map(() => ''));
     case 'audiogram': return Object.fromEntries(AUDIOGRAM_ROWS.map(([k]) => [k, {}]));
-    case 'list': return [];
+    case 'list':
+    case 'protocol': return [];
     default: return '';
   }
 }
 
+// Optional sections (extra tests, protocol checklist) start switched off; the clinician adds the ones
+// that were done. Core sections are always in the report.
+export function optionalKeys(tpl) {
+  return tpl.sections.filter((s) => s.optional).map((s) => s.key);
+}
+
+export function isIncluded(tpl, data, key) {
+  const section = tpl.sections.find((s) => s.key === key);
+  if (!section || !section.optional) return true;
+  return Array.isArray(data?.included) && data.included.includes(key);
+}
+
 export function blankReport(tpl, caseInfo = {}) {
-  const data = { case: Object.fromEntries(CASE_FIELDS.map(([k]) => [k, caseInfo[k] || ''])), header_date: '' };
+  const data = { case: Object.fromEntries(CASE_FIELDS.map(([k]) => [k, caseInfo[k] || ''])), header_date: '', included: [] };
   for (const s of tpl.sections) data[s.key] = blankSection(s);
   return data;
 }
@@ -314,6 +477,11 @@ function cleanSection(section, value) {
       const items = Array.isArray(value) ? value : String(value ?? '').split('\n');
       return items.map((i) => text(i, 1200).trim()).filter(Boolean).slice(0, 60);
     }
+    case 'protocol': {
+      const ids = new Set(protocolSteps(section.protocol).map(([id]) => id));
+      const ticked = Array.isArray(value) ? value : [];
+      return ticked.map((i) => String(i)).filter((i) => ids.has(i)).slice(0, 80);
+    }
     default: return text(value, 8000);
   }
 }
@@ -321,9 +489,11 @@ function cleanSection(section, value) {
 // Keeps only what the template knows about, with sensible lengths.
 export function cleanReportData(tpl, input = {}) {
   const c = input.case && typeof input.case === 'object' ? input.case : {};
+  const optional = optionalKeys(tpl);
   const data = {
     case: Object.fromEntries(CASE_FIELDS.map(([k]) => [k, text(c[k], 300)])),
     header_date: isIsoDate(input.header_date) ? input.header_date : '',
+    included: Array.isArray(input.included) ? input.included.filter((k) => optional.includes(k)) : [],
   };
   for (const s of tpl.sections) data[s.key] = cleanSection(s, input[s.key]);
   return data;
@@ -334,9 +504,13 @@ export function reportAsText(tpl, data) {
   const lines = [];
   for (const [k, label] of CASE_FIELDS) if (data.case?.[k]) lines.push(`${label}: ${data.case[k]}`);
   for (const s of tpl.sections) {
+    if (!isIncluded(tpl, data, s.key)) continue;
     const v = data[s.key];
     let body = '';
-    if (s.kind === 'fields') body = s.fields.filter(([k]) => v?.[k]).map(([k, label]) => `- ${label}: ${v[k]}`).join('\n');
+    if (s.kind === 'protocol') {
+      const labels = Object.fromEntries(protocolSteps(s.protocol));
+      body = (Array.isArray(v) ? v : []).map((id) => labels[id] && `- ${labels[id]}`).filter(Boolean).join('\n');
+    } else if (s.kind === 'fields') body = s.fields.filter(([k]) => v?.[k]).map(([k, label]) => `- ${label}: ${v[k]}`).join('\n');
     else if (s.kind === 'table') body = s.rows.map((r, i) => (v?.[i]?.some(Boolean) ? `- ${r}: ${s.columns.map((c, j) => (v[i][j] ? `${c} ${v[i][j]}` : '')).filter(Boolean).join('; ')}` : '')).filter(Boolean).join('\n');
     else if (s.kind === 'freetable') body = (v || []).filter((row) => row.some(Boolean)).map((row) => `- ${row.map((cell, j) => (cell ? `${s.columns[j]} ${cell}` : '')).filter(Boolean).join('; ')}`).join('\n');
     else if (s.kind === 'audiogram') {
