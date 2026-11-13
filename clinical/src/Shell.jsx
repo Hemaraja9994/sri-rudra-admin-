@@ -24,6 +24,26 @@ const PORTAL_NAV = [
   { to: '/settings', label: 'Settings' },
 ];
 
+// "Install app" at the end of the sidebar, as on the portal pages. The install itself is done by
+// /__srr/install.js (window.srrInstall); without it, or when no one-click install is available,
+// the link opens the /install page. Hidden when the portal is already running as the app.
+function InstallLink() {
+  const api = window.srrInstall;
+  const [mode, setMode] = React.useState(() => (api ? api.mode() : 'guide'));
+  React.useEffect(() => (api ? api.onChange(() => setMode(api.mode())) : undefined), [api]);
+  if (mode === 'installed') return null;
+  return (
+    <a href="/install" className="srr-install-link" onClick={(event) => { if (api && api.run()) event.preventDefault(); }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 4v11" />
+        <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+        <path d="M5 20h14" />
+      </svg>
+      <span>Install app</span>
+    </a>
+  );
+}
+
 export default function Shell({ session, divisionId, children }) {
   const { user, clinics } = session;
   const clinicName = user.canSeeAllClinics ? 'All clinics' : (clinics.find((c) => c.id === user.clinic_id)?.name || 'One clinic');
@@ -58,6 +78,7 @@ export default function Shell({ session, divisionId, children }) {
           }
           return <a key={item.to} href={item.to}>{item.label}</a>;
         })}
+        <InstallLink />
         <div className="sidebar__foot">
           <small>{user.full_name}</small>
           <small style={{ marginBottom: 8 }}>{clinicName}</small>

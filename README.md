@@ -45,6 +45,29 @@ Everything lives on the clinic's own domain:
 - **Undo a bad update**: Cloudflare → `sri-rudra-portal-plus` → Deployments → the previous version →
   Rollback.
 
+## Install as an app
+
+Staff can install the portal like an app: its own icon and window on a computer, full-screen from the
+Home Screen on a phone. It is the same portal (same sign-in, always the current version).
+
+| Device | How |
+|---|---|
+| Windows or Mac, Chrome or Edge | one click: "Install app" (the browser's own install box) |
+| Android, Chrome | one click: "Install app" |
+| iPhone or iPad | Apple allows no install button: Share → Add to Home Screen → Add (shown step by step) |
+
+Where the link appears: a card under the sign-in form, "Install app" at the end of the sidebar (portal
+and clinical pages), the shareable page **admin.srirudraspeechandhearing.com/install** (with a QR code
+for phones), and "Install admin portal app" in the website's staff area (repo `Clinic_Web`).
+
+Files: `static/__srr/app.webmanifest` (name, icons, shortcuts to Appointments, Audiology and SLP),
+`icons/` (श्री drawn in Noto Serif Devanagari Bold, SIL OFL), `install.js` (install button logic and
+the iPhone steps), `install.html` (served at `/install`), `sw.js` (served at `/sw.js`) and
+`offline.html`.
+
+The service worker caches only the "No internet connection" page. Portal pages and patient data are
+never stored on the device. To switch it off for everyone, follow the comment at the top of `sw.js`.
+
 ## One-time database step
 
 Cloudflare → D1 → `sri-rudra-portal-db` → Console → paste `docs/d1-console-clinical.sql` → Execute.

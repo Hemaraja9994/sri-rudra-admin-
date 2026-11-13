@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#173451">
+  <title>No internet · Sri Rudra Admin</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid; place-items: center; padding: 24px;
+      background: #f6f8fb; color: #1b324a;
+      font: 18px/1.5 Carlito, Calibri, "Segoe UI", system-ui, sans-serif;
+    }
+    main { width: min(440px, 100%); text-align: center; }
+    .mark {
+      width: 72px; height: 72px; margin: 0 auto 22px; border-radius: 50%;
+      display: grid; place-items: center; background: #fff; color: #173451;
+      box-shadow: inset 0 0 0 4px #f46b20, 0 10px 30px rgba(23, 52, 81, .12);
+      font-size: 24px; font-weight: 700;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.2; color: #173451; }
+    p { margin: 0 0 26px; color: #475d70; }
+    button {
+      font: inherit; font-weight: 700; color: #fff; background: #173451;
+      border: 0; border-radius: 12px; padding: 13px 26px; cursor: pointer;
+    }
+    button:hover { background: #204a6b; }
+    button:focus-visible { outline: 3px solid #f46b20; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark" aria-hidden="true">श्री</div>
+    <h1>No internet connection</h1>
+    <p>Sri Rudra Admin needs the internet to show today's appointments and records. Check the Wi-Fi or mobile data, then try again.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>
