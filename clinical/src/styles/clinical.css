@@ -256,6 +256,18 @@
 .clin-staff__id b { color: var(--srr-navy); }
 .clin-staff__id .muted { display: block; font-size: 13px; }
 .clin-staff__act { display: flex; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+.clin-centre.is-off { opacity: .72; }
+.clin-centre.is-off .clin-centre__head h2 { color: var(--srr-muted); }
+.clin-centre__head h2 .tag { margin-left: 2px; }
+.clin-centre__headact { display: flex; align-items: center; gap: 8px; flex: none; }
+
+/* Per-centre quick links into the clinical caseloads, and the portal's own pages. */
+.clin-centre__hub { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 2px 0 10px; }
+.clin-hub__lbl { font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--srr-muted); text-transform: uppercase; margin-right: 2px; }
+.clin-hublink { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--srr-line); background: #fff; color: var(--srr-navy); font-size: 13.5px; font-weight: 600; text-decoration: none; transition: background .12s, border-color .12s; }
+.clin-hublink:hover { background: var(--srr-soft); border-color: var(--srr-navy); }
+.clin-ops { border-left: 3px solid var(--srr-navy); }
+.clin-oplinks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 
 /* ===== print (reports and plans) ===== */
 .clin-print { display: none; }

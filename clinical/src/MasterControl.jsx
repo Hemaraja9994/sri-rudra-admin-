@@ -1,7 +1,21 @@
 import React, { useEffect, useState } from 'react';
 
-import { portalApi } from './api.js';
+import { linkTo, portalApi } from './api.js';
 import { AsyncButton, Icon, Input, Modal, Notice, Select } from './ui.jsx';
+
+// The admin portal's own operational and financial pages (outside the clinical app).
+// Links open the portal page full-screen; the owner picks the centre there (the portal
+// keeps its own "clinic" filter). Paths are the portal's own routes.
+const PORTAL_PAGES = [
+  ['/appointments', 'Appointments'],
+  ['/reports', 'Test reports'],
+  ['/sales', 'Hearing aid sales'],
+  ['/orders', 'HA orders'],
+  ['/trials', 'HA trials (HAT)'],
+  ['/collections', 'Collections'],
+  ['/expenses', 'Expenses'],
+  ['/attendance', 'Attendance'],
+];
 
 // Master control (owner / admin): every centre with its staff, in one place. Add staff, move them
 // between centres, change their role, switch an account off, or set a new password. It works on the
@@ -21,7 +35,7 @@ export default function MasterControl({ session }) {
   const [msg, setMsg] = useState('');
   const [editUser, setEditUser] = useState(null); // user object or {new:true}
   const [resetUser, setResetUser] = useState(null);
-  const [addClinic, setAddClinic] = useState(false);
+  const [editClinic, setEditClinic] = useState(null); // clinic object (edit) or {new:true}
 
   const load = () => {
     setError('');
@@ -65,6 +79,16 @@ export default function MasterControl({ session }) {
     try { await portalApi(`/users/${u.id}`, { method: 'PATCH', body: { is_active: u.is_active ? 0 : 1 } }); load(); } catch (e) { setError(e.message); }
   }
 
+  async function saveClinic(form) {
+    setMsg(''); setError('');
+    const body = { name: form.name.trim(), group_name: form.group_name.trim() || null, city: form.city.trim() || null, is_active: form.is_active ? 1 : 0 };
+    try {
+      if (form.id) { await portalApi(`/clinics/${form.id}`, { method: 'PATCH', body }); setMsg('Centre details updated.'); }
+      else { await portalApi('/clinics', { method: 'POST', body: { ...body, sort_order: 100 } }); setMsg('Centre added.'); }
+      setEditClinic(null); load();
+    } catch (e) { setError(e.message); }
+  }
+
   const clinicName = (id) => clinics?.find((c) => c.id === id)?.name || '—';
 
   function StaffRow({ u }) {
@@ -93,7 +117,7 @@ export default function MasterControl({ session }) {
           <div className="sub">Every centre and its staff. Add people, move them, change roles, switch accounts off, or set a new password.</div>
         </div>
         <div className="head__actions">
-          <button type="button" className="btn btn--secondary" onClick={() => setAddClinic(true)}><Icon name="building" size={16} />Add centre</button>
+          <button type="button" className="btn btn--secondary" onClick={() => setEditClinic({ new: true, is_active: true })}><Icon name="building" size={16} />Add centre</button>
           <button type="button" className="btn btn--primary" onClick={() => setEditUser({ new: true, role: 'audiologist', is_active: true, clinic_id: '' })}><Icon name="plus" size={16} />Add staff</button>
         </div>
       </div>
@@ -111,24 +135,42 @@ export default function MasterControl({ session }) {
           {clinics.map((c) => {
             const staff = byClinic(c.id);
             return (
-              <section key={c.id} className="card clin-centre">
+              <section key={c.id} className={`card clin-centre ${c.is_active ? '' : 'is-off'}`}>
                 <div className="clin-centre__head">
-                  <h2><Icon name="building" size={18} />{c.name}</h2>
-                  <span className="clin-count num">{staff.length}</span>
+                  <h2><Icon name="building" size={18} />{c.name}{c.is_active ? '' : <span className="tag">Inactive</span>}</h2>
+                  <div className="clin-centre__headact">
+                    <span className="clin-count num">{staff.length}</span>
+                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditClinic(c)}><Icon name="edit" size={15} />Edit centre</button>
+                  </div>
                 </div>
-                {c.city && <div className="clin-centre__sub">{[c.group_name, c.city].filter(Boolean).join(' · ')}{c.is_active ? '' : ' · inactive'}</div>}
+                {(c.group_name || c.city) && <div className="clin-centre__sub">{[c.group_name, c.city].filter(Boolean).join(' · ')}</div>}
+
+                <div className="clin-centre__hub">
+                  <span className="clin-hub__lbl">Caseload</span>
+                  <a className="clin-hublink" {...linkTo(`/clinical/audiology?clinic=${c.id}`)}>Audiology</a>
+                  <a className="clin-hublink" {...linkTo(`/clinical/slp?clinic=${c.id}`)}>Speech-Language</a>
+                </div>
+
                 {staff.length === 0 ? <p className="muted">No staff assigned to this centre yet.</p>
                   : <ul className="clin-stafflist">{staff.map((u) => <StaffRow key={u.id} u={u} />)}</ul>}
                 <button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditUser({ new: true, role: 'audiologist', is_active: true, clinic_id: String(c.id) })}><Icon name="plus" size={14} />Add staff here</button>
               </section>
             );
           })}
+
+          <section className="card clin-centre clin-ops">
+            <div className="clin-centre__head"><h2><Icon name="chart" size={18} />Operations &amp; finances</h2></div>
+            <p className="clin-centre__sub">The portal&rsquo;s own day-to-day and financial pages. Each opens full-screen; choose the centre with the portal&rsquo;s clinic filter at the top.</p>
+            <div className="clin-oplinks">
+              {PORTAL_PAGES.map(([href, label]) => <a key={href} className="clin-hublink" href={href}>{label}</a>)}
+            </div>
+          </section>
         </div>
       )}
 
       {editUser && <StaffForm user={editUser} clinics={clinics || []} onSave={saveUser} onClose={() => setEditUser(null)} />}
       {resetUser && <ResetForm user={resetUser} onReset={resetPassword} onClose={() => setResetUser(null)} />}
-      {addClinic && <ClinicForm onClose={(saved) => { setAddClinic(false); if (saved) load(); }} onError={setError} />}
+      {editClinic && <ClinicForm clinic={editClinic} onSave={saveClinic} onClose={() => setEditClinic(null)} />}
     </>
   );
 }
@@ -197,25 +239,35 @@ function ResetForm({ user, onReset, onClose }) {
   );
 }
 
-function ClinicForm({ onClose, onError }) {
-  const [form, setForm] = useState({ name: '', group_name: '', city: '' });
+function ClinicForm({ clinic, onSave, onClose }) {
+  const isNew = clinic.new;
+  const [form, setForm] = useState({
+    id: clinic.id,
+    name: clinic.name || '',
+    group_name: clinic.group_name || '',
+    city: clinic.city || '',
+    is_active: clinic.is_active !== false && clinic.is_active !== 0,
+  });
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
   const [error, setError] = useState('');
   return (
-    <Modal title="Add a centre" onClose={() => onClose(false)}>
+    <Modal title={isNew ? 'Add a centre' : `Edit ${clinic.name}`} onClose={onClose}>
       <label className="field field--wide"><span>Centre name</span><Input value={form.name} onChange={set('name')} autoFocus /></label>
       <div className="grid2">
         <label className="field"><span>Group (optional)</span><Input value={form.group_name} onChange={set('group_name')} /></label>
         <label className="field"><span>City</span><Input value={form.city} onChange={set('city')} /></label>
       </div>
+      {!isNew && (
+        <label className="clin-check"><input type="checkbox" checked={form.is_active} onChange={(e) => set('is_active')(e.target.checked)} /><span>Centre is active (shown in lists and filters)</span></label>
+      )}
       <Notice>{error}</Notice>
       <div className="modal__foot">
         <span className="spacer" />
-        <button type="button" className="btn btn--secondary" onClick={() => onClose(false)}>Cancel</button>
+        <button type="button" className="btn btn--secondary" onClick={onClose}>Cancel</button>
         <AsyncButton busyLabel="Saving…" onClick={async () => {
           if (!form.name.trim()) { setError('Enter the centre name.'); return; }
-          try { await portalApi('/clinics', { method: 'POST', body: { ...form, is_active: 1, sort_order: 100 } }); onClose(true); } catch (e) { setError(e.message); }
-        }}>Add centre</AsyncButton>
+          await onSave(form);
+        }}>{isNew ? 'Add centre' : 'Save changes'}</AsyncButton>
       </div>
     </Modal>
   );

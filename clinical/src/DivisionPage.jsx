@@ -47,7 +47,11 @@ export default function DivisionPage({ divisionId, session }) {
   const [status, setStatus] = useState('active');
   const [grouping, setGrouping] = useState(() => remembered('clin.grouping', 'stage'));
   const [q, setQ] = useState('');
-  const [clinicId, setClinicId] = useState('');
+  // A ?clinic=<id> in the address opens the caseload pre-filtered to that centre
+  // (used by the per-centre links on Master control).
+  const [clinicId, setClinicId] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('clinic') || ''; } catch { return ''; }
+  });
   const [adding, setAdding] = useState(false);
   const [fromFile, setFromFile] = useState(false);
   const [error, setError] = useState('');
@@ -70,7 +74,7 @@ export default function DivisionPage({ divisionId, session }) {
   if (!pipeline) groups = groups.filter((g) => g.patients.length);
 
   const chooseGrouping = (id) => { setGrouping(id); remember('clin.grouping', id); };
-  const showClinic = session.user.canSeeAllClinics && session.clinics.length > 1;
+  const showClinic = (session.user.canSeeAllClinics && session.clinics.length > 1) || !!clinicId;
 
   return (
     <>
