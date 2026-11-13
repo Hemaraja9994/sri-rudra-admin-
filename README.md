@@ -68,10 +68,34 @@ the iPhone steps), `install.html` (served at `/install`), `sw.js` (served at `/s
 The service worker caches only the "No internet connection" page. Portal pages and patient data are
 never stored on the device. To switch it off for everyone, follow the comment at the top of `sw.js`.
 
+## Reports, therapy plans and AI records
+
+On each patient's page, and from "Add from file" on the caseload:
+
+- **Add from file** — upload a case sheet, report or photo; Cloudflare Workers AI (free daily
+  allowance) reads it and fills in the Add patient form for the clinician to check, with a
+  duplicate-patient check. Files are kept with the patient in Workers KV (binding `FILES`).
+- **Diagnostic reports** — templates matched to the clinic's own reports: audiology (PTA/SRT/SDS,
+  immittance impression, separate right/left **audiogram plots**, OAE, BERA/ABR, ASSR, VEMP,
+  tinnitus — each optional and editable) and SLP (voice, fluency, child, adult, with ASHA
+  protocols). The impression is AI-drafted and editable; the per-ear diagnosis is clinician-written.
+  Reports print on A4 with the clinic logo and letterhead.
+- **Therapy plans** — the AI drafts the framework, goals and every session; the clinician edits,
+  ticks sessions done (added to the timeline), records the progress data sheet, and prints.
+- **Master control** (`/clinical/master`, owner/admin only) — every centre with its staff; add
+  people, move them, change roles, switch accounts off, reset passwords. Works on the portal's own
+  staff and centre records.
+
+AI use is recorded in the portal's audit log; nothing is saved or printed without a clinician's
+click. The report/plan models are in `shared/reports.js` and `shared/plans.js`; the server is
+`worker/documents.js` and `worker/ai.js`; local development uses `--var AI_MOCK:1` for fixed answers.
+
 ## One-time database step
 
-Cloudflare → D1 → `sri-rudra-portal-db` → Console → paste `docs/d1-console-clinical.sql` → Execute.
-Additive only (`CREATE TABLE IF NOT EXISTS`); safe to run twice.
+Two additive migrations in `sri-rudra-portal-db` (Cloudflare → D1 → Console → Execute; safe to run
+twice): `docs/d1-console-clinical.sql` (patients and entries) and `docs/d1-console-clinical-2.sql`
+(files, reports, plans). All `CREATE TABLE IF NOT EXISTS`. Also needs the `FILES` KV namespace and
+the Workers AI binding (both in `wrangler.toml`).
 
 ## Development
 
