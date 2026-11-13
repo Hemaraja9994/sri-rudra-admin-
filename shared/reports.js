@@ -99,7 +99,7 @@ export const TEMPLATES = [
       ] },
       { key: 'electro', title: 'Other electrophysiology', kind: 'table', optional: true, columns: ['Findings'], rows: ['Electrocochleography (ECochG)', 'Cortical / late latency response (LLR / P300)', 'Acoustic reflex decay'] },
       { key: 'protocol', title: 'Assessment protocol (ASHA / BSA)', kind: 'protocol', optional: true, protocol: 'aud_eval' },
-      { key: 'impression', title: 'Audiological impression', kind: 'narrative', optional: true, ai: true, hint: 'Overall impression; you can edit the auto-impression freely.' },
+      { key: 'impression', title: 'Audiological impression', kind: 'narrative', ai: true, hint: 'Overall impression; you can edit the auto-impression freely.' },
       audDiagnosis,
       recommendations,
     ],

@@ -10,6 +10,7 @@ import {
   patientsToCsv,
   summarize,
 } from '../../shared/clinical.js';
+import AddFromFile from './AddFromFile.jsx';
 import { api, downloadText, linkTo, navigate } from './api.js';
 import PatientForm from './PatientForm.jsx';
 import { Icon, Notice, PriorityTag, ReviewText } from './ui.jsx';
@@ -48,6 +49,7 @@ export default function DivisionPage({ divisionId, session }) {
   const [q, setQ] = useState('');
   const [clinicId, setClinicId] = useState('');
   const [adding, setAdding] = useState(false);
+  const [fromFile, setFromFile] = useState(false);
   const [error, setError] = useState('');
 
   const load = () => api(`/patients?division=${divisionId}&status=all`)
@@ -87,6 +89,9 @@ export default function DivisionPage({ divisionId, session }) {
               <Icon name="download" size={16} />Export CSV
             </button>
           )}
+          <button type="button" className="btn btn--secondary" onClick={() => setFromFile(true)}>
+            <Icon name="ai" size={16} />Add from file
+          </button>
           <button type="button" className="btn btn--primary" onClick={() => setAdding(true)}>
             <Icon name="plus" size={16} />Add patient
           </button>
@@ -164,7 +169,10 @@ export default function DivisionPage({ divisionId, session }) {
         <section className="card clin-empty">
           <h3>No {div.label.toLowerCase()} patients yet</h3>
           <p>Add a patient to start their record. Their care stage, review dates, sessions and notes stay together here, next to their appointments and test reports.</p>
-          <button type="button" className="btn btn--primary" onClick={() => setAdding(true)}><Icon name="plus" size={16} />Add the first patient</button>
+          <div className="head__actions">
+            <button type="button" className="btn btn--secondary" onClick={() => setFromFile(true)}><Icon name="ai" size={16} />Add from a file</button>
+            <button type="button" className="btn btn--primary" onClick={() => setAdding(true)}><Icon name="plus" size={16} />Add the first patient</button>
+          </div>
         </section>
       ) : (
         <>
@@ -208,6 +216,7 @@ export default function DivisionPage({ divisionId, session }) {
           }}
         />
       )}
+      {fromFile && <AddFromFile divisionId={divisionId} session={session} onClose={() => setFromFile(false)} />}
     </>
   );
 }

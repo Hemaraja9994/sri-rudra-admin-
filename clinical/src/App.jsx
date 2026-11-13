@@ -3,7 +3,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DIVISIONS } from '../../shared/clinical.js';
 import { api } from './api.js';
 import DivisionPage from './DivisionPage.jsx';
+import MasterControl from './MasterControl.jsx';
 import PatientPage from './PatientPage.jsx';
+import PlanEditor from './PlanEditor.jsx';
+import ReportEditor from './ReportEditor.jsx';
 import Shell from './Shell.jsx';
 
 function usePath() {
@@ -37,8 +40,14 @@ export default function App() {
 
   let page;
   let m;
-  if ((m = path.match(/^\/clinical\/(audiology|slp)\/patients\/(\d+)\/?$/))) {
+  if ((m = path.match(/^\/clinical\/(audiology|slp)\/patients\/(\d+)\/reports\/(\d+)\/?$/))) {
+    page = <ReportEditor key={path} divisionId={m[1]} id={m[3]} session={session} />;
+  } else if ((m = path.match(/^\/clinical\/(audiology|slp)\/patients\/(\d+)\/plans\/(\d+)\/?$/))) {
+    page = <PlanEditor key={path} divisionId={m[1]} id={m[3]} session={session} />;
+  } else if ((m = path.match(/^\/clinical\/(audiology|slp)\/patients\/(\d+)\/?$/))) {
     page = <PatientPage key={path} divisionId={m[1]} id={m[2]} session={session} />;
+  } else if (path.match(/^\/clinical\/master\/?$/)) {
+    page = <MasterControl key="master" session={session} />;
   } else if ((m = path.match(/^\/clinical\/(audiology|slp)\/?$/))) {
     page = <DivisionPage key={m[1]} divisionId={m[1]} session={session} />;
   } else {
@@ -46,7 +55,7 @@ export default function App() {
     page = <DivisionPage key="audiology" divisionId="audiology" session={session} />;
   }
   const divisionId = (path.match(/^\/clinical\/(audiology|slp)/) || [])[1] || 'audiology';
-  document.title = `${DIVISIONS[divisionId].label} · Sri Rudra Admin Portal`;
+  document.title = path.includes('/master') ? 'Master control · Sri Rudra Admin Portal' : `${DIVISIONS[divisionId].label} · Sri Rudra Admin Portal`;
 
   return <Shell session={session} divisionId={divisionId}>{page}</Shell>;
 }
